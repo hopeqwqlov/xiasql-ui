@@ -16,12 +16,16 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableModel;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.BorderFactory;
+import javax.swing.JComponent;
 import java.awt.*;
 import java.awt.event.ItemListener;
 import javax.swing.JMenuItem;
@@ -29,6 +33,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.border.AbstractBorder;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.TableColumnModel;
 
 
 
@@ -45,7 +52,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
     private final List<Request_md5> log4_md5 = new ArrayList<Request_md5>();//用于存放数据包的md5
     private IHttpRequestResponse currentlyDisplayedItem;
     public PrintWriter stdout;
-    int switchs = 1; //开关 0关 1开
+    int switchs = 0; //开关 0关 1开
     int clicks_Repeater=0;//64是监听 0是关闭
     int clicks_Proxy=0;//4是监听 0是关闭
     int conut = 0; //记录条数
@@ -63,6 +70,157 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
     int is_cookie = -1;//cookie是否要注入，-1关闭 2开启。
     String white_URL = "";
     int white_switchs = 0;//白名单开关
+
+    private static final Color UI_BACKGROUND = new Color(245, 247, 250);
+    private static final Color UI_PANEL = Color.WHITE;
+    private static final Color UI_BORDER = new Color(214, 221, 230);
+    private static final Color UI_ACCENT = new Color(42, 92, 170);
+    private static final Color UI_ACCENT_SOFT = new Color(232, 241, 255);
+    private static final Font UI_FONT = new Font("Microsoft YaHei UI", Font.PLAIN, 12);
+    private static final Font UI_FONT_BOLD = new Font("Microsoft YaHei UI", Font.BOLD, 12);
+    private static final Font UI_FONT_TITLE = new Font("Microsoft YaHei UI", Font.BOLD, 20);
+
+    private JPanel sectionPanel(String title, Component content)
+    {
+        JPanel panel = new RoundedPanel(new BorderLayout(), UI_PANEL, UI_BORDER, 12);
+        panel.setBorder(new EmptyBorder(10, 12, 12, 12));
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(UI_FONT_BOLD);
+        titleLabel.setForeground(UI_ACCENT);
+        titleLabel.setBorder(new EmptyBorder(0, 0, 8, 0));
+        panel.add(titleLabel, BorderLayout.NORTH);
+        panel.add(content, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel cardPanel(String title)
+    {
+        JPanel card = new RoundedPanel(new BorderLayout(), UI_PANEL, UI_BORDER, 14);
+        card.setBorder(new EmptyBorder(10, 12, 12, 12));
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(UI_FONT_BOLD);
+        titleLabel.setForeground(UI_ACCENT);
+        titleLabel.setBorder(new EmptyBorder(0, 0, 8, 0));
+        card.add(titleLabel, BorderLayout.NORTH);
+        return card;
+    }
+
+    private void styleTable(JTable table)
+    {
+        table.setFont(UI_FONT);
+        table.setRowHeight(24);
+        table.setFillsViewportHeight(true);
+        table.setAutoCreateRowSorter(true);
+        table.setGridColor(new Color(229, 234, 241));
+        table.setSelectionBackground(new Color(220, 235, 255));
+        table.setSelectionForeground(Color.BLACK);
+        table.getTableHeader().setFont(UI_FONT_BOLD);
+        table.getTableHeader().setReorderingAllowed(false);
+    }
+
+    private void styleButton(JButton button)
+    {
+        button.setFont(UI_FONT_BOLD);
+        button.setFocusPainted(false);
+        button.setContentAreaFilled(false);
+        button.setOpaque(true);
+        button.setBackground(UI_ACCENT_SOFT);
+        button.setForeground(new Color(25, 61, 116));
+        button.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(new Color(181, 202, 233), 12),
+                new EmptyBorder(6, 10, 6, 10)
+        ));
+    }
+
+    private void styleCheckBox(JCheckBox checkBox)
+    {
+        checkBox.setFont(UI_FONT);
+        checkBox.setBackground(UI_PANEL);
+        checkBox.setFocusPainted(false);
+        checkBox.setBorder(new EmptyBorder(3, 0, 3, 0));
+    }
+
+    private void styleTextField(JTextField textField)
+    {
+        textField.setFont(UI_FONT);
+        textField.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(UI_BORDER, 12),
+                new EmptyBorder(5, 8, 5, 8)
+        ));
+    }
+
+    private void setFixedHeight(JComponent component, int height)
+    {
+        Dimension preferred = component.getPreferredSize();
+        component.setMinimumSize(new Dimension(0, height));
+        component.setPreferredSize(new Dimension(preferred.width, height));
+        component.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+    }
+
+    private void sizeColumns(JTable table, int... widths)
+    {
+        TableColumnModel columns = table.getColumnModel();
+        for (int i = 0; i < widths.length && i < columns.getColumnCount(); i++) {
+            columns.getColumn(i).setPreferredWidth(widths[i]);
+        }
+    }
+
+    private static class RoundedPanel extends JPanel
+    {
+        private final Color fillColor;
+        private final Color borderColor;
+        private final int radius;
+
+        RoundedPanel(LayoutManager layout, Color fillColor, Color borderColor, int radius)
+        {
+            super(layout);
+            this.fillColor = fillColor;
+            this.borderColor = borderColor;
+            this.radius = radius;
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g)
+        {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(fillColor);
+            g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
+            g2.setColor(borderColor);
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
+            g2.dispose();
+        }
+    }
+
+    private static class RoundedBorder extends AbstractBorder
+    {
+        private final Color color;
+        private final int radius;
+
+        RoundedBorder(Color color, int radius)
+        {
+            this.color = color;
+            this.radius = radius;
+        }
+
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height)
+        {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            g2.drawRoundRect(x, y, width - 1, height - 1, radius, radius);
+            g2.dispose();
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c)
+        {
+            return new Insets(5, 8, 5, 8);
+        }
+    }
 
 
 
@@ -103,52 +261,83 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
                 JSplitPane splitPanes = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
                 JSplitPane splitPanes_2 = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+                splitPane.setBorder(new EmptyBorder(8, 8, 8, 8));
+                splitPane.setBackground(UI_BACKGROUND);
+                splitPanes.setBorder(null);
+                splitPanes_2.setBorder(null);
 
                 // table of log entries
                 logTable = new Table(BurpExtender.this);
                 JScrollPane scrollPane = new JScrollPane(logTable); //给列表添加滚动条
+                styleTable(logTable);
+                sizeColumns(logTable, 55, 95, 560, 120, 120);
 
 
 
                 //test
-                JPanel jp=new JPanel();
-                JLabel jl=new JLabel("==>");    //创建一个标签
+                JPanel jp=new JPanel(new GridLayout(1, 2, 8, 0));
+                jp.setBackground(UI_BACKGROUND);
 
                 Table_log2 table=new Table_log2(model);
                 JScrollPane pane=new JScrollPane(table);//给列表添加滚动条
+                styleTable(table);
+                sizeColumns(table, 130, 260, 110, 110, 70, 80);
 
-                jp.add(scrollPane);    //将表格加到面板
-                jp.add(jl);    //将标签添加到面板
-                jp.add(pane);    //将表格加到面板
+                jp.add(sectionPanel("原始流量", scrollPane));    //将表格加到面板
+                jp.add(sectionPanel("Payload 结果", pane));    //将表格加到面板
 
                 //侧边复选框
                 JPanel jps=new JPanel();
-                jps.setLayout(new GridLayout(18, 1)); //六行一列
-                JLabel jls=new JLabel("插件名：瞎注 author：算命縖子");    //创建一个标签
-                JLabel jls_1=new JLabel("blog:www.nmd5.com");    //创建一个标签
-                JLabel jls_2=new JLabel("版本：xia SQL V2.9");    //创建一个标签
-                JLabel jls_3=new JLabel("感谢名单：Moonlit、阿猫阿狗、Shincehor");    //创建一个标签
-                JCheckBox chkbox1=new JCheckBox("启动插件", true);    //创建指定文本和状态的复选框
-                JCheckBox chkbox2=new JCheckBox("监控Repeater");    //创建指定文本的复选框
-                JCheckBox chkbox3=new JCheckBox("监控Proxy");    //创建指定文本的复选框
-                JCheckBox chkbox4=new JCheckBox("值是数字则进行-1、-0",true);    //创建指定文本的复选框
-                JLabel jls_4=new JLabel("修改payload后记得点击加载");    //创建一个标签
-                JCheckBox chkbox5=new JCheckBox("自定义payload");    //创建指定文本的复选框
-                JCheckBox chkbox6=new JCheckBox("自定义payload中空格url编码",true);    //创建指定文本的复选框
-                JCheckBox chkbox7=new JCheckBox("自定义payload中参数值置空");    //创建指定文本的复选框
-                JCheckBox chkbox8=new JCheckBox("测试Cookie");    //创建指定文本的复选框
-                JLabel jls_5=new JLabel("如果需要多个域名加白请用,隔开");    //创建一个标签
-                JTextField textField = new JTextField("填写白名单域名");//白名单文本框
+                jps.setLayout(new BoxLayout(jps, BoxLayout.Y_AXIS)); //紧凑控制面板
+                jps.setBackground(UI_BACKGROUND);
+                jps.setBorder(new EmptyBorder(8, 8, 8, 8));
+                JLabel jls=new JLabel("xia SQL");    //创建一个标签
+                JLabel jls_1=new JLabel("V2.9 · UI custom build");    //创建一个标签
+                JCheckBox chkbox1=new JCheckBox("启用", false);    //创建指定文本和状态的复选框
+                JCheckBox chkbox2=new JCheckBox("Repeater");    //创建指定文本的复选框
+                JCheckBox chkbox3=new JCheckBox("Proxy");    //创建指定文本的复选框
+                JCheckBox chkbox4=new JCheckBox("数字 -1/-0",true);    //创建指定文本的复选框
+                JLabel jls_4=new JLabel("修改后点保存生效");    //创建一个标签
+                JCheckBox chkbox5=new JCheckBox("自定义");    //创建指定文本的复选框
+                JCheckBox chkbox6=new JCheckBox("空格编码",true);    //创建指定文本的复选框
+                JCheckBox chkbox7=new JCheckBox("置空参数值");    //创建指定文本的复选框
+                JCheckBox chkbox8=new JCheckBox("Cookie");    //创建指定文本的复选框
+                JLabel jls_5=new JLabel("多个域名用英文逗号分隔");    //创建一个标签
+                JTextField textField = new JTextField("example.com,api.example.com");//白名单文本框
 
                 //chkbox4.setEnabled(false);//设置为不可以选择
 
                 JButton btn1=new JButton("清空列表");    //创建JButton对象
-                JButton btn2=new JButton("加载/重新加载payload");    //创建JButton对象
-                JButton btn3=new JButton("启动白名单");    //处理白名单
+                JButton btn2=new JButton("加载 / 保存 payload");    //创建JButton对象
+                JButton btn3=new JButton("启用白名单");    //处理白名单
+                jls.setFont(UI_FONT_TITLE);
+                jls.setForeground(UI_ACCENT);
+                jls_1.setFont(UI_FONT);
+                jls_1.setForeground(new Color(90, 103, 122));
+                jls_4.setFont(UI_FONT_BOLD);
+                jls_5.setFont(UI_FONT_BOLD);
+                styleCheckBox(chkbox1);
+                styleCheckBox(chkbox2);
+                styleCheckBox(chkbox3);
+                styleCheckBox(chkbox4);
+                styleCheckBox(chkbox5);
+                styleCheckBox(chkbox6);
+                styleCheckBox(chkbox7);
+                styleCheckBox(chkbox8);
+                styleTextField(textField);
+                styleButton(btn1);
+                styleButton(btn2);
+                styleButton(btn3);
+                setFixedHeight(textField, 30);
+                setFixedHeight(btn1, 32);
+                setFixedHeight(btn2, 32);
+                setFixedHeight(btn3, 32);
 
                 //自定义payload区
                 JPanel jps_2=new JPanel();
-                jps_2.setLayout(new GridLayout(1, 1)); //六行一列
+                jps_2.setLayout(new BorderLayout()); //payload 区
+                jps_2.setBackground(UI_PANEL);
+                jps_2.setBorder(new EmptyBorder(10, 10, 10, 10));
                 JTextArea jta=new JTextArea("%df' and sleep(3)%23\n'and '1'='1",18,16);
 
                 //读取ini配置文件
@@ -162,13 +351,19 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 } catch (IOException e) {
                 }
 
-                //jta.setLineWrap(true);    //设置文本域中的文本为自动换行
+                jta.setLineWrap(true);    //设置文本域中的文本为自动换行
+                jta.setWrapStyleWord(true);
                 jta.setForeground(Color.BLACK);    //设置组件的背景色
-                jta.setFont(new Font("楷体",Font.BOLD,16));    //修改字体样式
-                jta.setBackground(Color.LIGHT_GRAY);    //设置背景色
+                jta.setFont(new Font("Consolas",Font.PLAIN,14));    //修改字体样式
+                jta.setBackground(new Color(242, 245, 248));    //设置背景色
                 jta.setEditable(false);//不可编辑状态
                 JScrollPane jsp=new JScrollPane(jta);    //将文本域放入滚动窗口
-                jps_2.add(jsp);    //将JScrollPane添加到JPanel容器中
+                JLabel payloadTitle = new JLabel("自定义 Payload");
+                payloadTitle.setFont(UI_FONT_BOLD);
+                payloadTitle.setForeground(UI_ACCENT);
+                payloadTitle.setBorder(new EmptyBorder(0, 0, 8, 0));
+                jps_2.add(payloadTitle, BorderLayout.NORTH);
+                jps_2.add(jsp, BorderLayout.CENTER);    //将JScrollPane添加到JPanel容器中
 
                 //添加复选框监听事件
                 chkbox1.addItemListener(new ItemListener() {
@@ -241,7 +436,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                         }else {
                             stdout.println("关闭 自定义payload");
                             jta.setEditable(false);
-                            jta.setBackground(Color.LIGHT_GRAY);    //设置背景色
+                            jta.setBackground(new Color(242, 245, 248));    //设置背景色
                             JTextArea_int = 0;
                         }
                     }
@@ -328,14 +523,14 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 btn3.addActionListener(new ActionListener() {//加载自定义payload
                     @Override
                     public void actionPerformed(ActionEvent e) {
-                        if(btn3.getText().equals("启动白名单")){
-                            btn3.setText("关闭白名单");
+                        if(btn3.getText().equals("启用白名单")){
+                            btn3.setText("停用白名单");
                             white_URL = textField.getText();
                             white_switchs = 1;
                             textField.setEditable(false);
                             textField.setForeground(Color.GRAY);//设置组件的背景色
                         }else {
-                            btn3.setText("启动白名单");
+                            btn3.setText("启用白名单");
                             white_switchs = 0;
                             textField.setEditable(true);
                             textField.setForeground(Color.BLACK);
@@ -343,24 +538,72 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                     }
                 });
 
-                jps.add(jls);
-                jps.add(jls_1);
-                jps.add(jls_2);
-                jps.add(jls_3);
-                jps.add(chkbox1);
-                jps.add(chkbox2);
-                jps.add(chkbox3);
-                jps.add(chkbox4);
-                jps.add(chkbox8);
-                jps.add(btn1);
-                jps.add(jls_5);
-                jps.add(textField);
-                jps.add(btn3);
-                jps.add(jls_4);
-                jps.add(chkbox5);
-                jps.add(chkbox6);
-                jps.add(chkbox7);
-                jps.add(btn2);
+                JPanel headerPanel = new RoundedPanel(new BorderLayout(), UI_ACCENT_SOFT, new Color(200, 219, 247), 16);
+                headerPanel.setBorder(new EmptyBorder(12, 14, 12, 14));
+                JPanel headerText = new JPanel();
+                headerText.setOpaque(false);
+                headerText.setLayout(new BoxLayout(headerText, BoxLayout.Y_AXIS));
+                headerText.add(jls);
+                headerText.add(Box.createVerticalStrut(2));
+                headerText.add(jls_1);
+                headerPanel.add(headerText, BorderLayout.CENTER);
+
+                JPanel scanGrid = new JPanel(new GridLayout(0, 2, 8, 4));
+                scanGrid.setOpaque(false);
+                scanGrid.add(chkbox1);
+                scanGrid.add(chkbox2);
+                scanGrid.add(chkbox3);
+                scanGrid.add(chkbox4);
+                scanGrid.add(chkbox8);
+                JPanel scanCard = cardPanel("扫描开关");
+                scanCard.add(scanGrid, BorderLayout.CENTER);
+                scanCard.add(btn1, BorderLayout.SOUTH);
+
+                JPanel whiteBody = new JPanel();
+                whiteBody.setOpaque(false);
+                whiteBody.setLayout(new BoxLayout(whiteBody, BoxLayout.Y_AXIS));
+                whiteBody.add(jls_5);
+                whiteBody.add(Box.createVerticalStrut(6));
+                whiteBody.add(textField);
+                whiteBody.add(Box.createVerticalStrut(8));
+                whiteBody.add(btn3);
+                JPanel whiteCard = cardPanel("白名单");
+                whiteCard.add(whiteBody, BorderLayout.CENTER);
+
+                JPanel payloadGrid = new JPanel(new GridLayout(0, 2, 8, 4));
+                payloadGrid.setOpaque(false);
+                payloadGrid.add(chkbox5);
+                payloadGrid.add(chkbox6);
+                payloadGrid.add(chkbox7);
+                JPanel payloadCard = cardPanel("Payload");
+                JPanel payloadBody = new JPanel();
+                payloadBody.setOpaque(false);
+                payloadBody.setLayout(new BoxLayout(payloadBody, BoxLayout.Y_AXIS));
+                payloadBody.add(jls_4);
+                payloadBody.add(Box.createVerticalStrut(6));
+                payloadBody.add(payloadGrid);
+                payloadCard.add(payloadBody, BorderLayout.CENTER);
+                payloadCard.add(btn2, BorderLayout.SOUTH);
+
+                headerPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                scanCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+                whiteCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+                payloadCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+                headerPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, headerPanel.getPreferredSize().height));
+                scanCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, scanCard.getPreferredSize().height));
+                whiteCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, whiteCard.getPreferredSize().height));
+                payloadCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, payloadCard.getPreferredSize().height));
+                jps.add(headerPanel);
+                jps.add(Box.createVerticalStrut(8));
+                jps.add(scanCard);
+                jps.add(Box.createVerticalStrut(8));
+                jps.add(whiteCard);
+                jps.add(Box.createVerticalStrut(8));
+                jps.add(payloadCard);
+                jps.add(Box.createVerticalGlue());
+                JScrollPane controlsScroll = new JScrollPane(jps);
+                controlsScroll.setBorder(BorderFactory.createEmptyBorder());
+                controlsScroll.getVerticalScrollBar().setUnitIncrement(16);
 
 
 
@@ -373,21 +616,27 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 responseViewer = callbacks.createMessageEditor(BurpExtender.this, false);
                 tabs.addTab("Request", requestViewer.getComponent());
                 tabs.addTab("Response", responseViewer.getComponent());
+                tabs.setFont(UI_FONT_BOLD);
 
                 //jp.add(tabs);
 
                 //右边
-                splitPanes_2.setLeftComponent(jps);//上面
-                splitPanes_2.setRightComponent(jps_2);//下面
+                splitPanes_2.setLeftComponent(sectionPanel("控制面板", controlsScroll));//上面
+                splitPanes_2.setRightComponent(sectionPanel("Payload 编辑器", jps_2));//下面
+                splitPanes_2.setDividerLocation(360);
+                splitPanes_2.setResizeWeight(0.46);
 
                 //左边
                 splitPanes.setLeftComponent(jp);//上面
-                splitPanes.setRightComponent(tabs);//下面
+                splitPanes.setRightComponent(sectionPanel("请求 / 响应详情", tabs));//下面
+                splitPanes.setDividerLocation(360);
+                splitPanes.setResizeWeight(0.48);
 
                 //整体分布
                 splitPane.setLeftComponent(splitPanes);//添加在左面
                 splitPane.setRightComponent(splitPanes_2);//添加在右面
-                splitPane.setDividerLocation(1000);//设置分割的大小
+                splitPane.setDividerLocation(980);//设置分割的大小
+                splitPane.setResizeWeight(0.76);
 
                 // customize our UI components
                 callbacks.customizeUiComponent(splitPane);
@@ -966,7 +1215,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
             case 2:
                 return "URL";
             case 3:
-                return "返回包长度";
+                return "响应长度";
             case 4:
                 return "状态";
             default:
@@ -1026,13 +1275,13 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 case 0:
                     return "参数";
                 case 1:
-                    return "payload";
+                    return "Payload";
                 case 2:
-                    return "返回包长度";
+                    return "响应长度";
                 case 3:
                     return "变化";
                 case 4:
-                    return "用时";
+                    return "耗时";
                 case 5:
                     return "响应码";
                 default:
