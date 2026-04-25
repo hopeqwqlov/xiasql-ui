@@ -10,6 +10,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -68,6 +69,8 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
     int select_row = 0;//选中表格的行数
     Table logTable; //第一个表格框
     int is_cookie = -1;//cookie是否要注入，-1关闭 2开启。
+    int is_ua = 0;//ua头是否要注入，0关闭 1开启。
+    int is_host = 0;//host头是否要注入，0关闭 1开启。
     String white_URL = "";
     int white_switchs = 0;//白名单开关
 
@@ -163,6 +166,135 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
         for (int i = 0; i < widths.length && i < columns.getColumnCount(); i++) {
             columns.getColumn(i).setPreferredWidth(widths[i]);
         }
+    }
+
+    private boolean shouldTestParameter(IParameter para)
+    {
+        return para.getType() == 0 || para.getType() == 1 || para.getType() == 6 || para.getType() == is_cookie;
+    }
+
+    private ArrayList<String> buildPayloads(String value)
+    {
+        ArrayList<String> payloads = new ArrayList<String>();
+        payloads.add("'");
+        payloads.add("''");
+
+        if (is_int == 1 && value.matches("[0-9]+")) {
+            payloads.add("-1");
+            payloads.add("-0");
+        }
+
+        if (JTextArea_int == 1) {
+            String[] diyPayloads = JTextArea_data_1.split("\n");
+            for (String diyPayload : diyPayloads) {
+                payloads.add(diyPayload);
+            }
+        }
+
+        return payloads;
+    }
+
+    private boolean isBuiltInPayload(String payload)
+    {
+        return "'".equals(payload) || "''".equals(payload) || "-1".equals(payload) || "-0".equals(payload);
+    }
+
+    private String getHeaderValue(List<String> headers, String headerName)
+    {
+        String prefix = headerName.toLowerCase() + ":";
+        for (String header : headers) {
+            if (header.toLowerCase().startsWith(prefix)) {
+                return header.substring(header.indexOf(':') + 1).trim();
+            }
+        }
+        return null;
+    }
+
+    private List<String> replaceHeaderValue(List<String> headers, String headerName, String headerValue)
+    {
+        String prefix = headerName.toLowerCase() + ":";
+        List<String> newHeaders = new ArrayList<String>();
+        boolean replaced = false;
+
+        for (String header : headers) {
+            if (header.toLowerCase().startsWith(prefix)) {
+                newHeaders.add(headerName + ": " + headerValue);
+                replaced = true;
+            } else {
+                newHeaders.add(header);
+            }
+        }
+
+        if (!replaced) {
+            newHeaders.add(headerName + ": " + headerValue);
+        }
+
+        return newHeaders;
+    }
+
+    private byte[] getRequestBody(IHttpRequestResponse baseRequestResponse)
+    {
+        IRequestInfo requestInfo = helpers.analyzeRequest(baseRequestResponse);
+        return Arrays.copyOfRange(baseRequestResponse.getRequest(), requestInfo.getBodyOffset(), baseRequestResponse.getRequest().length);
+    }
+
+    private String scanHeader(IHttpRequestResponse baseRequestResponse, IHttpService iHttpService, String dataMd5, List<String> originalHeaders, byte[] requestBody, String headerName, String headerValue, int toolFlag, String change_sign_1)
+    {
+        if (headerValue == null) {
+            return change_sign_1;
+        }
+
+        stdout.println("\n\n原始请求头：" + headerName + ":" + headerValue);
+        ArrayList<String> payloads = buildPayloads(headerValue);
+        int change = 0;
+
+        for (String payload : payloads) {
+            String currentValue = headerValue;
+            int time_1 = 0, time_2 = 0;
+
+            if (JTextArea_int == 1 && diy_payload_2 == 1 && !isBuiltInPayload(payload)) {
+                currentValue = "";
+            }
+
+            List<String> newHeaders = replaceHeaderValue(originalHeaders, headerName, currentValue + payload);
+            byte[] newRequest = helpers.buildHttpMessage(newHeaders, requestBody);
+            IHttpRequestResponse requestResponse;
+
+            time_1 = (int) System.currentTimeMillis();
+            requestResponse = callbacks.makeHttpRequest(iHttpService, newRequest);
+            time_2 = (int) System.currentTimeMillis();
+
+            String change_sign;
+            if ("'".equals(payload) || "-1".equals(payload) || change == 0) {
+                change = requestResponse.getResponse().length;
+                change_sign = "";
+            } else {
+                if ("''".equals(payload) || "-0".equals(payload)) {
+                    if (change != requestResponse.getResponse().length) {
+                        if (("''".equals(payload) && requestResponse.getResponse().length == original_data_len) || ("-0".equals(payload) && requestResponse.getResponse().length == original_data_len)) {
+                            change_sign = "✔ ==> ?";
+                            change_sign_1 = " ✔";
+                        } else {
+                            change_sign = "✔ " + (change - requestResponse.getResponse().length);
+                            change_sign_1 = " ✔";
+                        }
+                    } else {
+                        change_sign = "";
+                    }
+                } else {
+                    if (time_2 - time_1 >= 3000) {
+                        change_sign = "time > 3";
+                        change_sign_1 = " ✔";
+                    } else {
+                        change_sign = "diy payload";
+                    }
+                }
+            }
+
+            log2.add(new LogEntry(conut, toolFlag, callbacks.saveBuffersToTempFiles(requestResponse), helpers.analyzeRequest(requestResponse).getUrl(), headerName, currentValue + payload, change_sign, dataMd5, time_2 - time_1, "end", helpers.analyzeResponse(requestResponse.getResponse()).getStatusCode()));
+        }
+
+        return change_sign_1;
     }
 
     private static class RoundedPanel extends JPanel
@@ -302,6 +434,8 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 JCheckBox chkbox6=new JCheckBox("空格编码",true);    //创建指定文本的复选框
                 JCheckBox chkbox7=new JCheckBox("置空参数值");    //创建指定文本的复选框
                 JCheckBox chkbox8=new JCheckBox("Cookie");    //创建指定文本的复选框
+                JCheckBox chkbox9=new JCheckBox("UA头");    //创建指定文本的复选框
+                JCheckBox chkbox10=new JCheckBox("Host头");    //创建指定文本的复选框
                 JLabel jls_5=new JLabel("多个域名用英文逗号分隔");    //创建一个标签
                 JTextField textField = new JTextField("example.com,api.example.com");//白名单文本框
 
@@ -324,6 +458,8 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 styleCheckBox(chkbox6);
                 styleCheckBox(chkbox7);
                 styleCheckBox(chkbox8);
+                styleCheckBox(chkbox9);
+                styleCheckBox(chkbox10);
                 styleTextField(textField);
                 styleButton(btn1);
                 styleButton(btn2);
@@ -487,6 +623,30 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                         }
                     }
                 });
+                chkbox9.addItemListener(new ItemListener() {
+                    @Override
+                    public void itemStateChanged(ItemEvent e) {
+                        if(chkbox9.isSelected()) {
+                            stdout.println("启动 测试UA头");
+                            is_ua = 1;
+                        }else {
+                            stdout.println("关闭 测试UA头");
+                            is_ua = 0;
+                        }
+                    }
+                });
+                chkbox10.addItemListener(new ItemListener() {
+                    @Override
+                    public void itemStateChanged(ItemEvent e) {
+                        if(chkbox10.isSelected()) {
+                            stdout.println("启动 测试Host头");
+                            is_host = 1;
+                        }else {
+                            stdout.println("关闭 测试Host头");
+                            is_host = 0;
+                        }
+                    }
+                });
 
                 btn1.addActionListener(new ActionListener() {//清空列表
                     @Override
@@ -555,6 +715,8 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 scanGrid.add(chkbox3);
                 scanGrid.add(chkbox4);
                 scanGrid.add(chkbox8);
+                scanGrid.add(chkbox9);
+                scanGrid.add(chkbox10);
                 JPanel scanCard = cardPanel("扫描开关");
                 scanCard.add(scanGrid, BorderLayout.CENTER);
                 scanCard.add(btn1, BorderLayout.SOUTH);
@@ -765,8 +927,12 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
             String change_sign_1 = ""; //用于显示第一个列表框的状态 变化 部分的内容
 
             //把当前url和参数进行md5加密，用于判断该url是否已经扫描过
-            List<IParameter>paraLists= helpers.analyzeRequest(baseRequestResponse).getParameters();
-            temp_data = String.valueOf(helpers.analyzeRequest(baseRequestResponse).getUrl());//url
+            IRequestInfo requestInfo = helpers.analyzeRequest(baseRequestResponse);
+            List<IParameter>paraLists= requestInfo.getParameters();
+            List<String> requestHeaders = requestInfo.getHeaders();
+            String userAgentValue = is_ua == 1 ? getHeaderValue(requestHeaders, "User-Agent") : null;
+            String hostValue = is_host == 1 ? getHeaderValue(requestHeaders, "Host") : null;
+            temp_data = String.valueOf(requestInfo.getUrl());//url
             //stdout.println(temp_data);
             String[] temp_data_strarray=temp_data.split("\\?");
             String temp_data =(String) temp_data_strarray[0];//获取问号前面的字符串
@@ -808,7 +974,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
             String[] request_datas;
             is_add = 0;
             for (IParameter para : paraLists){// 循环获取参数，判断类型，再构造新的参数，合并到新的请求包中。
-                if (para.getType() == 0 || para.getType() == 1 || para.getType() == 6 || para.getType() == is_cookie) { //getTpe()就是来判断参数是在那个位置的
+                if (shouldTestParameter(para)) { //getTpe()就是来判断参数是在那个位置的
                     if(is_add == 0){
                         is_add = 1;
                     }
@@ -838,10 +1004,24 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 }
             }
 
+            if (userAgentValue != null) {
+                if (is_add == 0) {
+                    is_add = 1;
+                }
+                temp_data += "+User-Agent";
+            }
+
+            if (hostValue != null) {
+                if (is_add == 0) {
+                    is_add = 1;
+                }
+                temp_data += "+Host";
+            }
+
 
 
             //url+参数进行编码
-            temp_data += "+"+helpers.analyzeRequest(baseRequestResponse).getMethod();
+            temp_data += "+"+requestInfo.getMethod();
             //this.stdout.println(temp_data);
             this.stdout.println("\nMD5(\""+temp_data+"\")");
             temp_data = MD5(temp_data);
@@ -889,8 +1069,9 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
             }
 
             //处理参数
-            List<IParameter>paraList= helpers.analyzeRequest(baseRequestResponse).getParameters();
+            List<IParameter>paraList= requestInfo.getParameters();
             byte[] new_Request = baseRequestResponse.getRequest();
+            byte[] requestBody = getRequestBody(baseRequestResponse);
             int json_count = -1;//记录json嵌套次数
 
             //****************************************
@@ -904,34 +1085,12 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                     json_count += 1;
                 }
 
-                //payload
-                ArrayList<String> payloads = new ArrayList<>();
-                payloads.add("'");
-                payloads.add("''");
-
-
-
-                if (para.getType() == 0 || para.getType() == 1 || para.getType() == 6 || para.getType() == is_cookie){ //getTpe()就是来判断参数是在那个位置的
+                if (shouldTestParameter(para)){ //getTpe()就是来判断参数是在那个位置的
                     String key = para.getName();//获取参数的名称
                     String value = para.getValue();//获取参数的值
                     stdout.println("\n\n原始数据："+key+":"+value);//输出原始的键值数据
 
-                    if(is_int == 1){//开关，用于判断是否要开启-1、-0的操作
-                        if (value.matches("[0-9]+")) {//用于判读参数的值是否为纯数字
-                            payloads.add("-1");
-                            payloads.add("-0");
-                        }
-                    }
-
-                    //自定义payload
-                    if(JTextArea_int == 1){
-                        String[] JTextArea_data = JTextArea_data_1.split("\n");
-                        for(String a:JTextArea_data){
-                            //stdout.println(a);
-                            //stdout.println("------");
-                            payloads.add(a);
-                        }
-                    }
+                    ArrayList<String> payloads = buildPayloads(value);
 
                     int change = 0; //用于判断返回包长度是否一致、保存第一次请求响应的长度
 
@@ -1155,6 +1314,14 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
                 para_name = para.getName();//用于判断json嵌套里面有列表，列表中带值只跑一次
                 stdout.println(json_count);
 
+            }
+
+            IHttpService iHttpService = baseRequestResponse.getHttpService();
+            if (userAgentValue != null) {
+                change_sign_1 = scanHeader(baseRequestResponse, iHttpService, temp_data, requestHeaders, requestBody, "User-Agent", userAgentValue, toolFlag, change_sign_1);
+            }
+            if (hostValue != null) {
+                change_sign_1 = scanHeader(baseRequestResponse, iHttpService, temp_data, requestHeaders, requestBody, "Host", hostValue, toolFlag, change_sign_1);
             }
 
         //用于更新是否已经跑完所有payload的状态
